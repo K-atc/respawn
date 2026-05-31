@@ -36,6 +36,8 @@ Options:
                        can be specified multiple times
   --delay DURATION     wait before restarting (default: 2s)
   --max-restarts N     stop after N restarts; 0 means unlimited (default: 0)
+  --lock-file PATH     prevent concurrent respawn instances with this lock file
+                       default for codex remote-control: /tmp/respawn-codex-remote-control.lock
 
 Examples:
   respawn
@@ -48,10 +50,12 @@ func main() {
 	var patterns arrayFlags
 	var delay time.Duration
 	var maxRestarts int
+	var lockFile string
 
 	flag.Var(&patterns, "restart-on", "regex that triggers restart when seen in output")
 	flag.DurationVar(&delay, "delay", 2*time.Second, "delay before restart")
 	flag.IntVar(&maxRestarts, "max-restarts", 0, "maximum restart count; 0 means unlimited")
+	flag.StringVar(&lockFile, "lock-file", "", "lock file that prevents concurrent respawn instances")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -60,9 +64,18 @@ func main() {
 		cmdArgs = []string{"codex", "remote-control"}
 	}
 	if len(patterns) == 0 {
-		patterns = []string{
-			`write_stdin failed: stdin is closed for this session`,
+		patterns = defaultRestartPatterns()
+	}
+	if lockFile == "" {
+		lockFile = defaultLockFile(cmdArgs)
+	}
+	if lockFile != "" {
+		lock, err := acquireLock(lockFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "respawn: another instance appears to be running (lock %s): %v\n", lockFile, err)
+			os.Exit(1)
 		}
+		defer lock.Close()
 	}
 
 	reList := make([]*regexp.Regexp, 0, len(patterns))
@@ -109,6 +122,32 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func defaultRestartPatterns() []string {
+	return []string{
+		`write_stdin failed: stdin is closed for this session`,
+		`ERROR`,
+	}
+}
+
+func defaultLockFile(args []string) string {
+	if len(args) == 2 && args[0] == "codex" && args[1] == "remote-control" {
+		return "/tmp/respawn-codex-remote-control.lock"
+	}
+	return ""
+}
+
+func acquireLock(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return f, nil
 }
 
 func runOnce(args []string, patterns []*regexp.Regexp, sigCh <-chan os.Signal, stopping *atomic.Bool) (restart bool, exitCode int) {

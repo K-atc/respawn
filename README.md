@@ -13,6 +13,7 @@ codex remote-control
 
 ```text
 write_stdin failed: stdin is closed for this session
+ERROR
 ```
 
 ## Requirements
@@ -82,6 +83,8 @@ Options:
                        can be specified multiple times
   --delay DURATION     wait before restarting (default: 2s)
   --max-restarts N     stop after N restarts; 0 means unlimited (default: 0)
+  --lock-file PATH     prevent concurrent respawn instances with this lock file
+                       default for codex remote-control: /tmp/respawn-codex-remote-control.lock
 ```
 
 ## Behavior
@@ -92,6 +95,7 @@ Options:
 - 子プロセスが終了した場合は、終了コードにかかわらず再起動します。
 - `Ctrl-C` / `SIGTERM` / `SIGHUP` を受け取ると、子プロセスグループへ signal を転送して `respawn` も終了します。
 - `--max-restarts` に 1 以上を指定すると、その回数の再起動後に終了します。
+- `codex remote-control` を監視する場合、デフォルトで `/tmp/respawn-codex-remote-control.lock` を使い、二重起動を防ぎます。
 
 ## Examples
 
@@ -112,6 +116,7 @@ respawn --max-restarts 10
 ```bash
 respawn \
   --restart-on 'write_stdin failed: stdin is closed' \
+  --restart-on 'ERROR' \
   --restart-on 'Full-history forked agents inherit' \
   -- codex remote-control
 ```
