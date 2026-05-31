@@ -1,14 +1,15 @@
-# codex-remote-control-respawn
+# respawn
 
-`codex remote-control` が特定のエラーを出して機能停止したときに、自動でプロセスを終了して再起動するための小さな Go 製ラッパーです。
+`respawn` は、指定したコマンドを起動し、終了したら再起動する小さな Go 製ラッパーです。
+子プロセスの stdout/stderr を監視し、指定した正規表現に一致する行が出た場合も子プロセスを停止して再起動します。
 
-デフォルトでは以下のコマンドを起動します。
+デフォルトでは以下のコマンドを監視します。
 
 ```bash
 codex remote-control
 ```
 
-標準出力または標準エラー出力に以下の文字列が出たら再起動します。
+デフォルトの再起動トリガーは以下の正規表現です。
 
 ```text
 write_stdin failed: stdin is closed for this session
@@ -17,9 +18,9 @@ write_stdin failed: stdin is closed for this session
 ## Requirements
 
 - Go 1.22 以上
-- `codex` コマンドが PATH 上にあること
 - Linux / Unix 系環境
   - プロセスグループに signal を送って子プロセスを停止します
+- デフォルト設定で使う場合は `codex` コマンドが PATH 上にあること
 
 確認例:
 
@@ -30,48 +31,42 @@ which codex
 
 ## Build
 
-このディレクトリでビルドします。
-
 ```bash
 go build -o respawn .
 ```
 
-任意のディレクトリに配置する例:
-
-```bash
-go build -o ./codex-remote-control-respawn .
-```
+必要に応じて PATH の通ったディレクトリへ配置してください。
 
 ## Usage
 
-通常は引数なしで実行します。
+引数なしで実行すると `codex remote-control` を監視します。
 
 ```bash
-codex-remote-control-respawn
+respawn
 ```
 
 これは以下と同等です。
 
 ```bash
-codex-remote-control-respawn -- codex remote-control
-```
-
-再起動前の待機時間を変える例:
-
-```bash
-codex-remote-control-respawn --delay 5s
-```
-
-再起動トリガーを追加または変更する例:
-
-```bash
-codex-remote-control-respawn --restart-on 'stdin is closed' -- codex remote-control
+respawn -- codex remote-control
 ```
 
 任意のコマンドを監視する例:
 
 ```bash
-codex-remote-control-respawn --restart-on 'fatal error' -- your-command arg1 arg2
+respawn -- your-command arg1 arg2
+```
+
+再起動前の待機時間を変える例:
+
+```bash
+respawn --delay 5s
+```
+
+再起動トリガーを変更する例:
+
+```bash
+respawn --restart-on 'stdin is closed' -- codex remote-control
 ```
 
 ## Options
@@ -91,30 +86,31 @@ Options:
 
 ## Behavior
 
-- 子プロセスの stdout/stderr をそのまま親の stdout/stderr に流します。
-- 指定した正規表現に一致する行を検出すると、子プロセスグループへ `SIGTERM` を送ります。
-- 10 秒以内に終了しない場合は `SIGKILL` を送ります。
-- 子プロセスが通常終了した場合も再起動します。
-- `Ctrl-C` / `SIGTERM` / `SIGHUP` は子プロセスグループへ転送して終了します。
+- 子プロセスの stdout/stderr を親プロセスの stdout/stderr にそのまま流します。
+- `--restart-on` に指定した正規表現に一致する行を検出すると、子プロセスグループへ `SIGTERM` を送って再起動します。
+- `SIGTERM` 後、10 秒以内に終了しない場合は子プロセスグループへ `SIGKILL` を送ります。
+- 子プロセスが終了した場合は、終了コードにかかわらず再起動します。
+- `Ctrl-C` / `SIGTERM` / `SIGHUP` を受け取ると、子プロセスグループへ signal を転送して `respawn` も終了します。
+- `--max-restarts` に 1 以上を指定すると、その回数の再起動後に終了します。
 
 ## Examples
 
 無制限に再起動:
 
 ```bash
-codex-remote-control-respawn
+respawn
 ```
 
 最大 10 回だけ再起動:
 
 ```bash
-codex-remote-control-respawn --max-restarts 10
+respawn --max-restarts 10
 ```
 
 複数のエラーパターンで再起動:
 
 ```bash
-codex-remote-control-respawn \
+respawn \
   --restart-on 'write_stdin failed: stdin is closed' \
   --restart-on 'Full-history forked agents inherit' \
   -- codex remote-control
