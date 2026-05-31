@@ -25,3 +25,23 @@ func TestDefaultLockFileEmptyForOtherCommands(t *testing.T) {
 		t.Fatalf("defaultLockFile() = %q, want empty", got)
 	}
 }
+
+func TestIsCodexRemoteControlProcess(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "direct", args: []string{"codex", "remote-control"}, want: true},
+		{name: "node wrapper", args: []string{"node", "/path/to/codex", "remote-control"}, want: true},
+		{name: "other codex command", args: []string{"codex", "exec"}, want: false},
+		{name: "too short", args: []string{"codex"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isCodexRemoteControlProcess(tt.args); got != tt.want {
+				t.Fatalf("isCodexRemoteControlProcess(%q) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}

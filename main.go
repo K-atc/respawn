@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,6 +66,13 @@ func main() {
 	}
 	if len(patterns) == 0 {
 		patterns = defaultRestartPatterns()
+	}
+	if isCodexRemoteControlCommand(cmdArgs) {
+		running, err := codexRemoteControlAlreadyRunning(os.Getpid())
+		if err == nil && running {
+			fmt.Fprintln(os.Stderr, "respawn: codex remote-control already appears to be running; not starting another instance")
+			os.Exit(1)
+		}
 	}
 	if lockFile == "" {
 		lockFile = defaultLockFile(cmdArgs)
@@ -132,10 +140,40 @@ func defaultRestartPatterns() []string {
 }
 
 func defaultLockFile(args []string) string {
-	if len(args) == 2 && args[0] == "codex" && args[1] == "remote-control" {
+	if isCodexRemoteControlCommand(args) {
 		return "/tmp/respawn-codex-remote-control.lock"
 	}
 	return ""
+}
+
+func isCodexRemoteControlCommand(args []string) bool {
+	return len(args) == 2 && filepath.Base(args[0]) == "codex" && args[1] == "remote-control"
+}
+
+func isCodexRemoteControlProcess(args []string) bool {
+	return len(args) >= 2 && filepath.Base(args[len(args)-2]) == "codex" && args[len(args)-1] == "remote-control"
+}
+
+func codexRemoteControlAlreadyRunning(selfPID int) (bool, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil || pid == selfPID {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		args := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
+		if isCodexRemoteControlProcess(args) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func acquireLock(path string) (*os.File, error) {

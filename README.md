@@ -95,7 +95,7 @@ Options:
 - 子プロセスが終了した場合は、終了コードにかかわらず再起動します。
 - `Ctrl-C` / `SIGTERM` / `SIGHUP` を受け取ると、子プロセスグループへ signal を転送して `respawn` も終了します。
 - `--max-restarts` に 1 以上を指定すると、その回数の再起動後に終了します。
-- `codex remote-control` を監視する場合、デフォルトで `/tmp/respawn-codex-remote-control.lock` を使い、二重起動を防ぎます。
+- `codex remote-control` を監視する場合、既存の `codex remote-control` プロセスがあれば起動せず、デフォルトで `/tmp/respawn-codex-remote-control.lock` も使って二重起動を防ぎます。
 
 ## Examples
 
