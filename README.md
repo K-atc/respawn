@@ -83,6 +83,9 @@ Options:
                        can be specified multiple times
   --delay DURATION     wait before restarting (default: 2s)
   --max-restarts N     stop after N restarts; 0 means unlimited (default: 0)
+  --quick-exit-window DURATION
+                       duration under which non-zero exit counts as quick failure (default: 5s)
+  --max-quick-exits N  stop after N consecutive quick non-zero exits; 0 means unlimited (default: 1)
   --lock-file PATH     prevent concurrent respawn instances with this lock file
                        default for codex remote-control: /tmp/respawn-codex-remote-control.lock
 ```
@@ -90,10 +93,12 @@ Options:
 ## Behavior
 
 - 子プロセスの stdout/stderr を親プロセスの stdout/stderr にそのまま流します。
-- `--restart-on` に指定した正規表現に一致する行を検出すると、子プロセスグループへ `SIGTERM` を送って再起動します。
-- `SIGTERM` 後、10 秒以内に終了しない場合は子プロセスグループへ `SIGKILL` を送ります。
+- `codex remote-control` は terminal 前提のため、PTY 経由で起動しつつ出力を監視します。
+- `--restart-on` に指定した正規表現に一致する行を検出すると、子プロセスグループと検出可能な子孫プロセスへ `SIGTERM` を送って再起動します。
+- `SIGTERM` 後、10 秒以内に終了しない場合は子プロセスグループと検出可能な子孫プロセスへ `SIGKILL` を送ります。
 - 子プロセスが終了した場合は、終了コードにかかわらず再起動します。
-- `Ctrl-C` / `SIGTERM` / `SIGHUP` を受け取ると、子プロセスグループへ signal を転送して `respawn` も終了します。
+- ただし、子プロセスが短時間で非ゼロ終了し続ける場合は、コマンド名の typo などによる無限再起動を避けるため停止します。
+- `Ctrl-C` / `SIGTERM` / `SIGHUP` を受け取ると、子プロセスグループと検出可能な子孫プロセスへ signal を転送して `respawn` も終了します。
 - `--max-restarts` に 1 以上を指定すると、その回数の再起動後に終了します。
 - `codex remote-control` を監視する場合、既存の `codex remote-control` プロセスがあれば起動せず、デフォルトで `/tmp/respawn-codex-remote-control.lock` も使って二重起動を防ぎます。
 
